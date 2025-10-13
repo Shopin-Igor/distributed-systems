@@ -1,0 +1,12 @@
+{
+  "balancerPort": 9999,
+  "controlPort": 9090,
+  "healthCheckIntervalSec": 30,
+  "configReloadIntervalSec": 30,
+  "connectTimeoutMs": 800,
+  "servers": [
+    { "serverId": "A", "host": "localhost", "port": 9001 },
+    { "serverId": "B", "host": "localhost", "port": 9002 },
+    { "serverId": "C", "host": "localhost", "port": 9003 }
+  ]
+}
