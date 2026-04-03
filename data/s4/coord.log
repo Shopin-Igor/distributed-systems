@@ -1,0 +1,2 @@
+24dce88e-bfa0-43ca-adf7-156ade4e8caa|BEGIN|shardA=DEBIT alice 100;shardB=CREDIT bob 100
+24dce88e-bfa0-43ca-adf7-156ade4e8caa|DECISION|COMMIT

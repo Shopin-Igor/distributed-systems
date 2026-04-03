@@ -1,0 +1,13 @@
+id,mode,topology,put_ratio,threads,total_ops,key_space,delay_ms,throughput_ops_sec,latency_avg_ms,latency_p50_ms,latency_p75_ms,latency_p95_ms,latency_p99_ms,convergence_ms,notes
+A1,multi,mesh,0.80,16,5000,10000,0,474.40,30.93,14,23,51,1023,40,benchmark
+A2,multi,mesh,0.20,16,5000,10000,0,1340.36,9.39,6,10,20,32,37,benchmark
+A3,multi,ring,0.80,16,5000,10000,0,1776.49,6.69,5,8,16,24,37,benchmark
+A4,multi,ring,0.20,16,5000,10000,0,4658.89,2.88,2,4,9,14,35,benchmark
+A5,multi,star,0.80,16,5000,10000,0,1730.81,8.68,7,12,22,32,34,benchmark
+A6,multi,star,0.20,16,5000,10000,0,4194.20,3.27,2,5,10,15,32,benchmark
+B1,multi,mesh,1.00,32,5000,5,0,219.73,140.15,104,164,292,1149,741,high-conflict
+B2,multi,mesh,1.00,32,5000,10000,0,193.69,163.27,96,189,417,1251,2068,low-conflict
+C1,single,async,0.50,16,5000,10000,0,13872.36,0.62,0,1,2,5,15000,RF=1-mixed
+C2,single,sync,0.50,16,TBD,10000,0,TBD,TBD,TBD,TBD,TBD,TBD,TBD,benchmark did not finish cleanly
+C3,multi,mesh,0.50,16,2000,10000,0,318.81,43.57,23,40,91,1063,45,mixed
+C4,multi,star,0.50,16,2000,10000,0,2410.71,6.01,5,8,16,25,35,mixed
