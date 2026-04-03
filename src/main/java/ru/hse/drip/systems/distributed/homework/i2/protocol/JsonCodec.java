@@ -14,7 +14,7 @@ public class JsonCodec {
         try {
             return mapper.writeValueAsString(obj);
         } catch (Exception e) {
-            throw new RuntimeException("JSON serialize failed", e);
+            throw new RuntimeException("Ошибка сериализации JSON", e);
         }
     }
 
@@ -22,7 +22,7 @@ public class JsonCodec {
         try {
             return mapper.readValue(line, clazz);
         } catch (Exception e) {
-            throw new RuntimeException("JSON parse failed: " + line, e);
+            throw new RuntimeException("Ошибка разбора JSON: " + line, e);
         }
     }
 
@@ -34,7 +34,7 @@ public class JsonCodec {
         try {
             return mapper.treeToValue(node, clazz);
         } catch (Exception e) {
-            throw new RuntimeException("JSON treeToValue failed", e);
+            throw new RuntimeException("Ошибка преобразования JSON treeToValue", e);
         }
     }
 }
