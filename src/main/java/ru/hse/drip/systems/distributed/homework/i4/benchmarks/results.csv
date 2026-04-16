@@ -1,0 +1,10 @@
+run_id,phase,mode,write_quorum_mode,w,r,put_ratio,threads,total_ops,key_space,delay_ms,unavailable_home_node_id,throughput_ops_sec,avg_latency_ms,p95_latency_ms,success_ops,error_ops,stale_read_count,read_repair_count,hints_created,hints_delivered,anti_entropy_runs,anti_entropy_recovered_keys,node_recovery_time_ms,notes
+A1,partA,leaderless,strict,3,3,0.80,16,1200,1000,0,,663.83,23.28,47,1200,0,5,5,0,0,0,0,0,strict (W;R)=(3;3); write-heavy
+A2,partA,leaderless,strict,3,3,0.20,16,1200,1000,0,,1200.77,12.70,24,1200,0,0,0,0,0,0,0,0,strict (W;R)=(3;3); read-heavy
+A3,partA,leaderless,strict,4,2,0.80,16,1200,1000,0,,1305.17,11.58,23,1200,0,5,5,0,0,0,0,0,strict (W;R)=(4;2); write-heavy
+A4,partA,leaderless,strict,4,2,0.20,16,1200,1000,0,,2083.66,7.11,16,1200,0,0,0,0,0,0,0,0,strict (W;R)=(4;2); read-heavy
+A5,partA,leaderless,strict,5,1,0.80,16,1200,1000,0,,1722.76,8.66,16,1200,0,0,0,0,0,0,0,0,strict (W;R)=(5;1); write-heavy
+A6,partA,leaderless,strict,5,1,0.20,16,1200,1000,0,,2115.94,6.99,13,1200,0,3,3,0,0,0,0,0,strict (W;R)=(5;1); read-heavy
+B1,partB,leaderless,strict,3,3,0.80,16,1200,1000,0,127.0.0.1:9105,2390.90,6.10,11,1200,0,3,3,0,0,0,0,0,strict with one unavailable home replica
+B2,partB,leaderless,sloppy,3,3,0.80,16,1200,1000,0,127.0.0.1:9105,2098.29,6.99,16,1200,0,1,1,0,0,0,0,0,sloppy with one unavailable home replica
+C1,partC,leaderless,strict,3,3,1.00,1,600,600,0,,215.26,4.12,7,600,0,0,0,0,0,1,600,489,recovery after wipe via anti-entropy

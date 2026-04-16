@@ -125,6 +125,98 @@ tasks.register<JavaExec>("runI3Cli") {
     standardInput = System.`in`
 }
 
+tasks.register<JavaExec>("runI4SelfTest") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("test")
+    jvmArgs("-ea")
+}
+
+tasks.register<JavaExec>("runI4Node1") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("127.0.0.1", "9101", "leader")
+}
+
+tasks.register<JavaExec>("runI4Node2") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("127.0.0.1", "9102", "follower")
+}
+
+tasks.register<JavaExec>("runI4Node3") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("127.0.0.1", "9103", "follower")
+}
+
+tasks.register<JavaExec>("runI4Node4") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("127.0.0.1", "9104", "follower")
+}
+
+tasks.register<JavaExec>("runI4Node5") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("127.0.0.1", "9105", "follower")
+}
+
+tasks.register<JavaExec>("runI4Node6") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("127.0.0.1", "9106", "follower")
+}
+
+tasks.register<JavaExec>("runI4Node7") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("127.0.0.1", "9107", "follower")
+}
+
+tasks.register<JavaExec>("runI4Node8") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("127.0.0.1", "9108", "follower")
+}
+
+tasks.register<JavaExec>("runI4Node9") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("127.0.0.1", "9109", "follower")
+}
+
+tasks.register<JavaExec>("runI4Node10") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.Main")
+    args("127.0.0.1", "9110", "follower")
+}
+
+tasks.register<JavaExec>("runI4Cli") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.cli.CliMain")
+    standardInput = System.`in`
+}
+
+tasks.register<JavaExec>("runI4RequiredBenchmarks") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i4.benchmarks.BenchmarkMain")
+    args(
+        "--nodes", "127.0.0.1:9101,127.0.0.1:9102,127.0.0.1:9103,127.0.0.1:9104,127.0.0.1:9105,127.0.0.1:9106,127.0.0.1:9107",
+        "--output", "src/main/java/ru/hse/drip/systems/distributed/homework/i4/benchmarks/results.csv",
+        "--report", "src/main/java/ru/hse/drip/systems/distributed/homework/i4/report.md"
+    )
+}
+
+tasks.register<Exec>("runI4RequiredBenchmarkSuite") {
+    dependsOn("classes")
+    workingDir = projectDir
+    commandLine(
+        "bash",
+        "src/main/java/ru/hse/drip/systems/distributed/homework/i4/benchmarks/run-required-benchmarks.sh"
+    )
+}
+
 tasks.register("printRuntimeClasspath") {
     doLast {
         println(sourceSets["main"].runtimeClasspath.asPath)
