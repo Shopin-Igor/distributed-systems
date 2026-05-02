@@ -16,10 +16,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 public class LeaderlessService {
     private static final int HOME_REPLICA_COUNT = 5;
@@ -33,7 +36,7 @@ public class LeaderlessService {
     private final TcpClient client = new TcpClient();
     private final ExecutorService asyncExecutor = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable);
-        thread.setName("i4-read-repair-" + THREAD_COUNTER.incrementAndGet());
+        thread.setName("i4-leaderless-rpc-" + THREAD_COUNTER.incrementAndGet());
         thread.setDaemon(true);
         return thread;
     });
@@ -67,12 +70,12 @@ public class LeaderlessService {
 
             int successfulAcks = 0;
             List<ClusterNode> failedHomes = new ArrayList<>();
-            for (ClusterNode homeNode : homeNodes()) {
-                ReplWriteAck ack = sendReplWrite(homeNode, write);
+            for (RpcResult<ReplWriteAck> result : callAll(homeNodes(), homeNode -> sendReplWrite(homeNode, write))) {
+                ReplWriteAck ack = result.response();
                 if (ack != null && ack.ok) {
                     successfulAcks++;
                 } else {
-                    failedHomes.add(homeNode);
+                    failedHomes.add(result.node());
                 }
             }
 
@@ -84,7 +87,7 @@ public class LeaderlessService {
                     }
                     for (ClusterNode spareNode : spares) {
                         ReplWrite hintWrite = new ReplWrite();
-                        hintWrite.operationId = operationId;
+                        hintWrite.operationId = hintOperationId(operationId, failedHome.nodeId);
                         hintWrite.sourceNodeId = cfg.nodeId;
                         hintWrite.key = req.key;
                         hintWrite.value = req.value;
@@ -120,8 +123,8 @@ public class LeaderlessService {
             }
 
             List<ReadResponse> successfulResponses = new ArrayList<>();
-            for (ClusterNode homeNode : homeNodes()) {
-                ReadResponse response = sendReadQuery(homeNode, req.requestId, req.key);
+            for (RpcResult<ReadResponse> result : callAll(homeNodes(), homeNode -> sendReadQuery(homeNode, req.requestId, req.key))) {
+                ReadResponse response = result.response();
                 if (response != null && response.ok) {
                     successfulResponses.add(response);
                 }
@@ -517,6 +520,35 @@ public class LeaderlessService {
         }
     }
 
+    private <T> List<RpcResult<T>> callAll(List<ClusterNode> nodes, Function<ClusterNode, T> call) {
+        List<CompletableFuture<RpcResult<T>>> futures = new ArrayList<>();
+        for (ClusterNode node : nodes) {
+            futures.add(CompletableFuture.supplyAsync(() -> new RpcResult<>(node, call.apply(node)), asyncExecutor));
+        }
+
+        List<RpcResult<T>> results = new ArrayList<>();
+        for (CompletableFuture<RpcResult<T>> future : futures) {
+            RpcResult<T> result = joinQuietly(future);
+            if (result != null) {
+                results.add(result);
+            }
+        }
+        return results;
+    }
+
+    private <T> T joinQuietly(CompletableFuture<T> future) {
+        try {
+            return future.join();
+        } catch (CompletionException e) {
+            return null;
+        }
+    }
+
+    private UUID hintOperationId(UUID operationId, String intendedHomeNodeId) {
+        String source = operationId + "|" + intendedHomeNodeId;
+        return UUID.nameUUIDFromBytes(source.getBytes(StandardCharsets.UTF_8));
+    }
+
     private boolean applyIfNewer(String key, VersionedValue incoming) {
         VersionedValue local = store.getVersioned(key);
         if (compareValues(incoming, local) > 0) {
@@ -652,4 +684,6 @@ public class LeaderlessService {
             throw new IllegalStateException("должно выполняться W + R > 5");
         }
     }
+
+    private record RpcResult<T>(ClusterNode node, T response) {}
 }
