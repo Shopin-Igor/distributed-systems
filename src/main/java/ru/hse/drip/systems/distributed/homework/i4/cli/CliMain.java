@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Set;
 
 public class CliMain {
+    private static final int CLIENT_TIMEOUT_MS = 5_000;
 
     public static void main(String[] args) throws Exception {
         ControllerState st = new ControllerState();
@@ -230,7 +231,13 @@ public class CliMain {
             default -> throw new IllegalArgumentException("неизвестная клиентская команда " + cmd.cmd);
         };
 
-        System.out.println(codec.toLine(call(node, req, client, codec)));
+        boolean canUseAnyLeaderlessCoordinator = st.clusterMode == ClusterMode.LEADERLESS
+                && cmd.opts.get("--target") == null
+                && ("put".equals(cmd.cmd) || "get".equals(cmd.cmd));
+        ClientResponse response = canUseAnyLeaderlessCoordinator
+                ? callFirstAvailable(leaderlessCoordinatorCandidates(st), req, client, codec)
+                : call(node, req, client, codec);
+        System.out.println(codec.toLine(response));
     }
 
     private static void executeGetAll(ControllerState st, TcpClient client, JsonCodec codec, String key) {
@@ -309,9 +316,46 @@ public class CliMain {
         return node;
     }
 
+    private static ClientResponse callFirstAvailable(List<ClusterNode> candidates, ClientRequest req, TcpClient client, JsonCodec codec) throws Exception {
+        Exception lastError = null;
+        for (ClusterNode candidate : candidates) {
+            try {
+                return call(candidate, req, client, codec);
+            } catch (Exception e) {
+                lastError = e;
+            }
+        }
+        if (lastError != null) {
+            throw lastError;
+        }
+        throw new IllegalArgumentException("нет coordinator-узлов для leaderless-запроса");
+    }
+
+    private static List<ClusterNode> leaderlessCoordinatorCandidates(ControllerState st) {
+        List<ClusterNode> candidates = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        addCoordinatorCandidates(st, candidates, seen, st.homeReplicaNodeIds);
+        addCoordinatorCandidates(st, candidates, seen, st.spareNodeIds);
+        for (ClusterNode node : st.nodes.values()) {
+            if (seen.add(node.nodeId)) {
+                candidates.add(node);
+            }
+        }
+        return candidates;
+    }
+
+    private static void addCoordinatorCandidates(ControllerState st, List<ClusterNode> candidates, Set<String> seen, List<String> nodeIds) {
+        for (String nodeId : nodeIds) {
+            ClusterNode node = st.nodes.get(nodeId);
+            if (node != null && seen.add(node.nodeId)) {
+                candidates.add(node);
+            }
+        }
+    }
+
     private static ClientResponse call(ClusterNode node, ClientRequest req, TcpClient client, JsonCodec codec) throws Exception {
         MessageEnvelope env = MessageEnvelope.of(req.type, codec.toTree(req));
-        String respLine = client.callLine(node.host, node.port, codec.toLine(env), 1000);
+        String respLine = client.callLine(node.host, node.port, codec.toLine(env), CLIENT_TIMEOUT_MS);
         MessageEnvelope respEnv = codec.fromLine(respLine, MessageEnvelope.class);
         return codec.treeToValue(respEnv.payload, ClientResponse.class);
     }
