@@ -7,18 +7,33 @@ import ru.hse.drip.systems.distributed.homework.i4.transport.TcpClient;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ReplicationManager implements AutoCloseable {
+    private static final AtomicInteger THREAD_COUNTER = new AtomicInteger();
+
     private final NodeConfig cfg;
     private final NodeState state;
     private final JsonCodec codec;
     private final TcpClient client = new TcpClient();
 
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1, runnable -> {
+        Thread thread = new Thread(runnable);
+        thread.setName("i4-replication-retry-" + THREAD_COUNTER.incrementAndGet());
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final ExecutorService rpcExecutor = Executors.newCachedThreadPool(runnable -> {
+        Thread thread = new Thread(runnable);
+        thread.setName("i4-replication-rpc-" + THREAD_COUNTER.incrementAndGet());
+        thread.setDaemon(true);
+        return thread;
+    });
 
     @Override
     public void close() {
         scheduler.shutdownNow();
+        rpcExecutor.shutdownNow();
     }
 
     private final ConcurrentHashMap<UUID, Pending> pending = new ConcurrentHashMap<>();
@@ -208,7 +223,7 @@ public class ReplicationManager implements AutoCloseable {
             MessageEnvelope env = MessageEnvelope.of(MessageType.REPL_PUT, codec.toTree(repl));
             String line = codec.toLine(env);
 
-            scheduler.execute(() -> {
+            rpcExecutor.execute(() -> {
                 try {
                     String respLine = client.callLine(follower.host, follower.port, line, state.hotPathTimeoutMs);
                     if (respLine == null) return;
