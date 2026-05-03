@@ -21,7 +21,7 @@ public class CliMain {
         CliParser parser = new CliParser();
 
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-        System.out.println("CLI готов. Команды: addNode/removeNode/listNodes/setMode/setLeader/setTopology/setStarCenter/setReplication/setRF/setSemiSyncAcks/setReplicationDelayMs setHomeReplicas setSpareNodes setQuorum setWriteQuorumMode put/get/delete/dump/getAll/clusterDump/dumpHints/runHintedHandoff/showMerkleRoot/wipeNodeData/runAntiEntropyCluster");
+        System.out.println("CLI готов. Команды: addNode/removeNode/listNodes/setMode/setLeader/setTopology/setStarCenter/setFollowerLeader/setReplication/setRF/setSemiSyncAcks/setReplicationDelayMs setHomeReplicas setSpareNodes setQuorum setWriteQuorumMode put/get/delete/dump/getAll/clusterDump/dumpHints/runHintedHandoff/showMerkleRoot/wipeNodeData/runAntiEntropyCluster");
         while (true) {
             System.out.print("> ");
             String line = br.readLine();
@@ -116,6 +116,30 @@ public class CliMain {
                         broadcastClusterUpdate(st, client, codec);
                         System.out.println("OK");
                     }
+                    case "setFollowerLeader" -> {
+                        ControllerState candidate = copyState(st);
+                        if (candidate.clusterMode != ClusterMode.MULTI) {
+                            throw new IllegalArgumentException("команда доступна только в multi-режиме");
+                        }
+                        String followerId = cmd.args.getFirst();
+                        String leaderId = cmd.args.get(1);
+                        if (!candidate.nodes.containsKey(followerId)) {
+                            throw new IllegalArgumentException("неизвестный follower-узел");
+                        }
+                        rebalanceRoles(candidate);
+                        if (!candidate.leaderNodeIds.contains(leaderId)) {
+                            throw new IllegalArgumentException("leader должен входить в список multi-лидеров");
+                        }
+                        if (candidate.leaderNodeIds.contains(followerId)) {
+                            throw new IllegalArgumentException("leader-узел нельзя привязать как follower");
+                        }
+                        candidate.nodes.get(followerId).assignedLeaderNodeId = leaderId;
+                        rebalanceRoles(candidate);
+                        validateControllerState(candidate);
+                        applyState(st, candidate);
+                        broadcastClusterUpdate(st, client, codec);
+                        System.out.println("OK");
+                    }
                     case "setReplication" -> {
                         ControllerState candidate = copyState(st);
                         candidate.mode = parseReplicationMode(cmd.args.getFirst());
@@ -201,7 +225,7 @@ public class CliMain {
     }
 
     private static void printNodes(ControllerState st) {
-        st.nodes.values().forEach(n -> System.out.println(n.nodeId + " " + n.host + ":" + n.port + " роль=" + effectiveRole(st, n.nodeId)));
+        st.nodes.values().forEach(n -> System.out.println(nodeLine(st, n)));
         System.out.println("режим=" + st.clusterMode.name().toLowerCase());
         if (st.clusterMode == ClusterMode.LEADERLESS) {
             System.out.println("homeReplicas=" + st.homeReplicaNodeIds);
@@ -213,6 +237,15 @@ public class CliMain {
             System.out.println("топология=" + st.topology.name().toLowerCase());
             System.out.println("центрЗвезды=" + st.starCenterNodeId);
         }
+    }
+
+    private static String nodeLine(ControllerState st, ClusterNode node) {
+        String role = effectiveRole(st, node.nodeId);
+        String line = node.nodeId + " " + node.host + ":" + node.port + " роль=" + role;
+        if (st.clusterMode == ClusterMode.MULTI && "follower".equals(role)) {
+            line += " leader=" + node.assignedLeaderNodeId;
+        }
+        return line;
     }
 
     private static void executeClientCommand(ControllerState st, TcpClient client, JsonCodec codec, CliParser.Parsed cmd) throws Exception {
@@ -449,8 +482,22 @@ public class CliMain {
             if (st.leaderNodeIds.isEmpty()) {
                 throw new IllegalArgumentException("multi-режим требует хотя бы одного leader");
             }
-            if (st.topology == TopologyType.STAR && (st.starCenterNodeId == null || !st.nodes.containsKey(st.starCenterNodeId))) {
-                throw new IllegalArgumentException("topology star требует существующий центр");
+            Set<String> leaders = new HashSet<>(st.leaderNodeIds);
+            for (String leaderId : st.leaderNodeIds) {
+                if (!st.nodes.containsKey(leaderId)) {
+                    throw new IllegalArgumentException("неизвестный multi-leader " + leaderId);
+                }
+            }
+            if (st.topology == TopologyType.STAR && (st.starCenterNodeId == null || !leaders.contains(st.starCenterNodeId))) {
+                throw new IllegalArgumentException("topology star требует leader-узел в качестве центра");
+            }
+            for (ClusterNode node : st.nodes.values()) {
+                if (leaders.contains(node.nodeId)) {
+                    continue;
+                }
+                if (node.assignedLeaderNodeId == null || !leaders.contains(node.assignedLeaderNodeId)) {
+                    throw new IllegalArgumentException("follower " + node.nodeId + " должен быть привязан к multi-leader");
+                }
             }
         }
     }
@@ -469,21 +516,56 @@ public class CliMain {
             }
             st.leaderNodeId = orderedIds.isEmpty() ? null : orderedIds.getFirst();
             st.leaderNodeIds = new ArrayList<>();
+            for (ClusterNode node : st.nodes.values()) {
+                node.role = effectiveRole(st, node.nodeId);
+                node.assignedLeaderNodeId = null;
+            }
         } else if (st.clusterMode == ClusterMode.MULTI) {
             int leaderCount = Math.min(4, orderedIds.size());
             st.leaderNodeIds = new ArrayList<>(orderedIds.subList(0, leaderCount));
-            if (st.starCenterNodeId == null && !orderedIds.isEmpty()) {
-                st.starCenterNodeId = orderedIds.getFirst();
+            if (st.starCenterNodeId == null || !st.leaderNodeIds.contains(st.starCenterNodeId)) {
+                st.starCenterNodeId = st.leaderNodeIds.isEmpty() ? null : st.leaderNodeIds.getFirst();
             }
+            assignMultiFollowerLeaders(st, orderedIds);
         } else {
             if (st.leaderNodeId == null && !orderedIds.isEmpty()) {
                 st.leaderNodeId = orderedIds.getFirst();
             }
             st.leaderNodeIds = st.leaderNodeId == null ? new ArrayList<>() : new ArrayList<>(List.of(st.leaderNodeId));
+            for (ClusterNode node : st.nodes.values()) {
+                node.role = effectiveRole(st, node.nodeId);
+                node.assignedLeaderNodeId = null;
+            }
+        }
+    }
+
+    private static void assignMultiFollowerLeaders(ControllerState st, List<String> orderedIds) {
+        Set<String> leaders = new HashSet<>(st.leaderNodeIds);
+        if (leaders.isEmpty()) {
+            for (ClusterNode node : st.nodes.values()) {
+                node.role = "follower";
+                node.assignedLeaderNodeId = null;
+            }
+            return;
         }
 
-        for (ClusterNode node : st.nodes.values()) {
-            node.role = effectiveRole(st, node.nodeId);
+        int autoIndex = 0;
+        for (String nodeId : orderedIds) {
+            ClusterNode node = st.nodes.get(nodeId);
+            if (node == null) {
+                continue;
+            }
+            if (leaders.contains(nodeId)) {
+                node.role = "leader";
+                node.assignedLeaderNodeId = null;
+                continue;
+            }
+
+            node.role = "follower";
+            if (node.assignedLeaderNodeId == null || !leaders.contains(node.assignedLeaderNodeId)) {
+                node.assignedLeaderNodeId = st.leaderNodeIds.get(autoIndex % st.leaderNodeIds.size());
+            }
+            autoIndex++;
         }
     }
 
@@ -506,7 +588,7 @@ public class CliMain {
     private static ControllerState copyState(ControllerState st) {
         ControllerState copy = new ControllerState();
         for (ClusterNode node : st.nodes.values()) {
-            copy.nodes.put(node.nodeId, new ClusterNode(node.nodeId, node.host, node.port, node.role));
+            copy.nodes.put(node.nodeId, new ClusterNode(node.nodeId, node.host, node.port, node.role, node.assignedLeaderNodeId));
         }
         copy.leaderNodeId = st.leaderNodeId;
         copy.clusterMode = st.clusterMode;
