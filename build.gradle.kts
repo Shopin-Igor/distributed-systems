@@ -217,6 +217,70 @@ tasks.register<Exec>("runI4RequiredBenchmarkSuite") {
     )
 }
 
+tasks.register<JavaExec>("runI5SelfTest") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i5.Main")
+    args("test")
+    jvmArgs("-ea")
+}
+
+tasks.register<JavaExec>("runI5Router") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i5.Main")
+    args("router", "127.0.0.1", "9200")
+}
+
+tasks.register<JavaExec>("runI5Node1") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i5.Main")
+    args("node", "A", "127.0.0.1", "9201")
+}
+
+tasks.register<JavaExec>("runI5Node2") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i5.Main")
+    args("node", "B", "127.0.0.1", "9202")
+}
+
+tasks.register<JavaExec>("runI5Node3") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i5.Main")
+    args("node", "C", "127.0.0.1", "9203")
+}
+
+tasks.register<JavaExec>("runI5Node4") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i5.Main")
+    args("node", "D", "127.0.0.1", "9204")
+}
+
+tasks.register<JavaExec>("runI5Node5") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i5.Main")
+    args("node", "E", "127.0.0.1", "9205")
+}
+
+tasks.register<JavaExec>("runI5Cli") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i5.Main")
+    args("cli", "127.0.0.1", "9200")
+    standardInput = System.`in`
+}
+
+tasks.register<JavaExec>("runI5LoadKeys") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i5.tools.LoadKeysMain")
+}
+
+tasks.register<JavaExec>("runI5RequiredBenchmarks") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("ru.hse.drip.systems.distributed.homework.i5.Main")
+    args(
+        "benchmark",
+        "--output", "src/main/java/ru/hse/drip/systems/distributed/homework/i5/benchmarks/results.csv"
+    )
+}
+
 tasks.register("printRuntimeClasspath") {
     doLast {
         println(sourceSets["main"].runtimeClasspath.asPath)
