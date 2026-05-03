@@ -5,6 +5,7 @@ public class ClusterNode {
     public String host;
     public int port;
     public String role;
+    public String assignedLeaderNodeId;
 
     public ClusterNode() {}
     public ClusterNode(String nodeId, String host, int port) {
@@ -14,9 +15,14 @@ public class ClusterNode {
     }
 
     public ClusterNode(String nodeId, String host, int port, String role) {
+        this(nodeId, host, port, role, null);
+    }
+
+    public ClusterNode(String nodeId, String host, int port, String role, String assignedLeaderNodeId) {
         this.nodeId = nodeId;
         this.host = host;
         this.port = port;
         this.role = role;
+        this.assignedLeaderNodeId = assignedLeaderNodeId;
     }
 }
