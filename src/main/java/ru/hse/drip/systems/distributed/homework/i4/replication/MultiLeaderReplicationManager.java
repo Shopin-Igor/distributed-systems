@@ -7,18 +7,28 @@ import ru.hse.drip.systems.distributed.homework.i4.transport.TcpClient;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class MultiLeaderReplicationManager implements AutoCloseable {
+    private static final AtomicInteger THREAD_COUNTER = new AtomicInteger();
+
     private final NodeConfig cfg;
     private final NodeState state;
     private final JsonCodec codec;
     private final TcpClient client = new TcpClient();
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final ExecutorService executor = Executors.newCachedThreadPool(runnable -> {
+        Thread thread = new Thread(runnable);
+        thread.setName("i4-multi-replication-" + THREAD_COUNTER.incrementAndGet());
+        thread.setDaemon(true);
+        return thread;
+    });
     private final Random rnd = new Random();
 
     public MultiLeaderReplicationManager(NodeConfig cfg, NodeState state, JsonCodec codec) {
@@ -67,16 +77,22 @@ public class MultiLeaderReplicationManager implements AutoCloseable {
     }
 
     private List<ClusterNode> computeTargets(ReplPut put, String senderNodeId, boolean localOrigin) {
-        return switch (state.topology) {
-            case MESH -> meshTargets(localOrigin, senderNodeId);
-            case RING -> ringTargets(senderNodeId);
-            case STAR -> starTargets(put, senderNodeId, localOrigin);
-        };
+        if (!isLeader(cfg.nodeId)) {
+            return List.of();
+        }
+
+        LinkedHashSet<ClusterNode> targets = new LinkedHashSet<>(localFollowerTargets());
+        targets.addAll(switch (state.topology) {
+            case MESH -> meshLeaderTargets(localOrigin, senderNodeId);
+            case RING -> ringLeaderTargets(put, localOrigin);
+            case STAR -> starLeaderTargets(put, senderNodeId, localOrigin);
+        });
+        return new ArrayList<>(targets);
     }
 
-    private List<ClusterNode> meshTargets(boolean localOrigin, String senderNodeId) {
+    private List<ClusterNode> meshLeaderTargets(boolean localOrigin, String senderNodeId) {
         List<ClusterNode> targets = new ArrayList<>();
-        for (ClusterNode node : state.nodes.values()) {
+        for (ClusterNode node : leaderNodes()) {
             if (cfg.nodeId.equals(node.nodeId)) {
                 continue;
             }
@@ -88,8 +104,8 @@ public class MultiLeaderReplicationManager implements AutoCloseable {
         return targets;
     }
 
-    private List<ClusterNode> ringTargets(String senderNodeId) {
-        List<ClusterNode> ordered = orderedNodes();
+    private List<ClusterNode> ringLeaderTargets(ReplPut put, boolean localOrigin) {
+        List<ClusterNode> ordered = orderedLeaders();
         if (ordered.size() <= 1) {
             return List.of();
         }
@@ -104,20 +120,20 @@ public class MultiLeaderReplicationManager implements AutoCloseable {
             return List.of();
         }
         ClusterNode next = ordered.get((currentIndex + 1) % ordered.size());
-        if (next.nodeId.equals(senderNodeId)) {
+        if (!localOrigin && put != null && next.nodeId.equals(put.originNodeId)) {
             return List.of();
         }
         return List.of(next);
     }
 
-    private List<ClusterNode> starTargets(ReplPut put, String senderNodeId, boolean localOrigin) {
+    private List<ClusterNode> starLeaderTargets(ReplPut put, String senderNodeId, boolean localOrigin) {
         String centerNodeId = state.starCenterNodeId;
-        if (centerNodeId == null || !state.nodes.containsKey(centerNodeId)) {
+        if (centerNodeId == null || !isLeader(centerNodeId)) {
             return List.of();
         }
         if (cfg.nodeId.equals(centerNodeId)) {
             List<ClusterNode> targets = new ArrayList<>();
-            for (ClusterNode node : state.nodes.values()) {
+            for (ClusterNode node : leaderNodes()) {
                 if (cfg.nodeId.equals(node.nodeId)) {
                     continue;
                 }
@@ -138,10 +154,43 @@ public class MultiLeaderReplicationManager implements AutoCloseable {
         return center == null ? List.of() : List.of(center);
     }
 
-    private List<ClusterNode> orderedNodes() {
-        List<ClusterNode> ordered = new ArrayList<>(state.nodes.values());
+    private List<ClusterNode> localFollowerTargets() {
+        List<ClusterNode> targets = new ArrayList<>();
+        for (ClusterNode node : state.nodes.values()) {
+            if (node == null || isLeader(node.nodeId)) {
+                continue;
+            }
+            if (cfg.nodeId.equals(node.assignedLeaderNodeId)) {
+                targets.add(node);
+            }
+        }
+        targets.sort(Comparator.comparing(node -> node.nodeId));
+        return targets;
+    }
+
+    private List<ClusterNode> orderedLeaders() {
+        List<ClusterNode> ordered = leaderNodes();
         ordered.sort(Comparator.comparing(node -> node.nodeId));
         return ordered;
+    }
+
+    private List<ClusterNode> leaderNodes() {
+        List<ClusterNode> leaders = new ArrayList<>();
+        if (state.leaderNodeIds == null) {
+            return leaders;
+        }
+        Set<String> leaderIds = new LinkedHashSet<>(state.leaderNodeIds);
+        for (String leaderId : leaderIds) {
+            ClusterNode leader = state.nodes.get(leaderId);
+            if (leader != null) {
+                leaders.add(leader);
+            }
+        }
+        return leaders;
+    }
+
+    private boolean isLeader(String nodeId) {
+        return nodeId != null && state.leaderNodeIds != null && state.leaderNodeIds.contains(nodeId);
     }
 
     @Override
