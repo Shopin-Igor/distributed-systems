@@ -181,7 +181,7 @@ public class Node {
     private String handleReplPut(JsonNode payload) {
         ReplPut put = codec.treeToValue(payload, ReplPut.class);
         ReplicaHandler.ReplicaApplyResult result = replica.onReplPut(put);
-        if (result.isNew && state.clusterMode == ClusterMode.MULTI) {
+        if (result.isNew && state.clusterMode == ClusterMode.MULTI && state.role == Role.LEADER) {
             multiReplMgr.forward(put, put.sourceNodeId, false);
         }
         return codec.toLine(MessageEnvelope.of(MessageType.REPL_ACK, codec.toTree(result.ack)));

@@ -227,7 +227,7 @@ public class BenchmarkMain {
     private List<ClusterNode> buildAdvertisedNodes(ClusterLayout layout, String unavailableHomeNodeId) {
         List<ClusterNode> advertised = new ArrayList<>();
         for (ClusterNode node : layout.actualNodes) {
-            ClusterNode copy = new ClusterNode(node.nodeId, node.host, node.port, node.role);
+            ClusterNode copy = new ClusterNode(node.nodeId, node.host, node.port, node.role, node.assignedLeaderNodeId);
             if (node.nodeId.equals(unavailableHomeNodeId)) {
                 copy.port = UNAVAILABLE_PORT;
             }
